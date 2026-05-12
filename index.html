@@ -350,7 +350,7 @@ function SQLScreen({ candidate, onComplete, savedData }) {
 
   return (
     <div className="screen" style={{justifyContent:'flex-start',paddingTop:'2rem'}}>
-      <ProgressHeader step={2} total={5} steps={['Registro','SQL','Cuotas','Ventas','Reporte']}/>
+      <ProgressHeader step={2} total={6} steps={['Registro','SQL','Cuotas','Ventas','PM','Reporte']}/>
       <div className="card card-wide animate-in">
         {/* Header */}
         <div className="row" style={{marginBottom:'1.5rem',justifyContent:'space-between'}}>
@@ -475,7 +475,7 @@ function BusinessScreen({ candidate, onComplete, savedData }) {
 
   return (
     <div className="screen" style={{justifyContent:'flex-start',paddingTop:'2rem'}}>
-      <ProgressHeader step={3} total={5} steps={['Registro','SQL','Cuotas','Ventas','Reporte']}/>
+      <ProgressHeader step={3} total={6} steps={['Registro','SQL','Cuotas','Ventas','PM','Reporte']}/>
       <div className="card card-wide animate-in">
         <div className="row" style={{marginBottom:'1.5rem',justifyContent:'space-between'}}>
           <div>
@@ -643,7 +643,7 @@ function ChartScreen({ candidate, onComplete, savedData }) {
 
   return (
     <div className="screen" style={{justifyContent:'flex-start',paddingTop:'2rem'}}>
-      <ProgressHeader step={4} total={5} steps={['Registro','SQL','Cuotas','Ventas','Reporte']}/>
+      <ProgressHeader step={4} total={6} steps={['Registro','SQL','Cuotas','Ventas','PM','Reporte']}/>
       <div className="card card-wide animate-in">
 
         <div className="row" style={{marginBottom:'1.5rem',justifyContent:'space-between'}}>
@@ -666,7 +666,7 @@ function ChartScreen({ candidate, onComplete, savedData }) {
         </div>
 
         {/* KPI summary row */}
-        <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'.65rem',marginBottom:'1.25rem'}}>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:'.65rem',marginBottom:'1.25rem'}}>
           {(() => {
             const may25 = SALES_2025[4];
             const may26 = SALES_2026[4];
@@ -859,8 +859,271 @@ function ChartScreen({ candidate, onComplete, savedData }) {
   );
 }
 
+
+// ── BACKLOG DATA ───────────────────────────────────────────────────────────
+const PM_BACKLOG = [
+  { id:'A', title:'Simplificar pantalla de selección de promo',   desc:'De 12 campos a 4',                          reason:'Fricción alta en el flujo de compra',              type:'UX',            pts:8,  impact:'Sube conversión' },
+  { id:'B', title:'Notificación push a usuarios que abandonaron', desc:'Vieron una promo pero no compraron',         reason:'Abandono sin compra — GMV recuperable',            type:'GMV',           pts:4,  impact:'Recupera GMV perdido' },
+  { id:'C', title:'Sección "Promos del día" en el home de Yape',  desc:'Mayor visibilidad y descubrimiento',         reason:'Bajo descubrimiento de promos en el home',         type:'GMV',           pts:14, impact:'Sube volumen de compras' },
+  { id:'D', title:'Integración cashback de Yape en Promos',       desc:'Aplicar saldo cashback al comprar promos',   reason:'Falta de incentivo de compra recurrente',          type:'GMV',           pts:22, impact:'Muy alto — pero incierto' },
+  { id:'E', title:'Corregir bug de transacciones fallidas',       desc:'15% de transacciones fallan silenciosamente',reason:'Pérdida activa de GMV — S/ 14K/mes estimados',     type:'Deuda técnica', pts:6,  impact:'Detiene pérdida real de GMV' },
+  { id:'F', title:'Rediseño módulo de pagos de Promos',           desc:'Eliminar deuda técnica acumulada de 3 años', reason:'Riesgo técnico que bloquea velocidad futura',      type:'Deuda técnica', pts:16, impact:'Ninguno directo en Q4' },
+];
+
+const TYPE_COLORS = {
+  'UX':            { bg:'rgba(167,139,250,.15)', border:'rgba(167,139,250,.4)',  text:'#C4B5FD' },
+  'GMV':           { bg:'rgba(52,211,153,.1)',   border:'rgba(52,211,153,.35)', text:'#6EE7B7' },
+  'Deuda técnica': { bg:'rgba(251,191,36,.1)',   border:'rgba(251,191,36,.35)', text:'#FCD34D' },
+};
+
+// ── PM SCREEN ──────────────────────────────────────────────────────────────
+function PMScreen({ candidate, onComplete, savedData }) {
+  const SPRINTS   = [1, 2, 3, 4, 5, 6];
+  const CAPACITY  = 10;
+  const TOTAL_CAP = 60;
+
+  // assignment: { itemId -> sprintNum | 'out' }
+  const initAssign = () => {
+    const a = {};
+    PM_BACKLOG.forEach(i => { a[i.id] = 'out'; });
+    return a;
+  };
+  const [assignment, setAssignment] = useState(savedData?.assignment || initAssign());
+  const [justify, setJustify]       = useState(savedData?.justify || '');
+  const [dragging, setDragging]     = useState(null);
+  const [saved, setSaved]           = useState(false);
+
+  const MIN_JUSTIFY = 120;
+  const isReady = justify.trim().length >= MIN_JUSTIFY && PM_BACKLOG.some(i => assignment[i.id] !== 'out');
+  const progress = Math.min(100, (justify.trim().length / MIN_JUSTIFY) * 100);
+
+  const totalSP = TOTAL_CAP;
+  const usedSP  = PM_BACKLOG.reduce((s, i) => s + i.pts, 0);
+
+  const sprintSP = (sp) =>
+    PM_BACKLOG.filter(i => assignment[i.id] === sp).reduce((s, i) => s + i.pts, 0);
+
+  const assignedSP = PM_BACKLOG.filter(i => assignment[i.id] !== 'out').reduce((s, i) => s + i.pts, 0);
+
+  const assign = (itemId, sprint) => {
+    setAssignment(prev => ({ ...prev, [itemId]: sprint }));
+  };
+
+  const handleDragStart = (e, itemId) => {
+    setDragging(itemId);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDrop = (e, target) => {
+    e.preventDefault();
+    if (dragging) { assign(dragging, target); setDragging(null); }
+  };
+
+  const handleDragOver = (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; };
+
+  const handleFinish = () => {
+    if (!isReady) return;
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2500);
+    const summary = PM_BACKLOG.map(i => {
+      const sp = assignment[i.id];
+      return i.id + ' (' + i.title + '): ' + (sp === 'out' ? 'Fuera del quarter' : 'Sprint ' + sp);
+    }).join('\n');
+    onComplete({ assignment, justify, summary: summary + '\n\nJustificación:\n' + justify });
+  };
+
+  const tc = (type) => TYPE_COLORS[type];
+
+  return (
+    <div className="screen" style={{justifyContent:'flex-start', paddingTop:'2rem'}}>
+      <ProgressHeader step={5} total={6} steps={['Registro','SQL','Cuotas','Ventas','PM','Reporte']}/>
+      <div className="card card-wide animate-in">
+
+        {/* Header */}
+        <div style={{marginBottom:'1.25rem'}}>
+          <div className="badge" style={{marginBottom:'.5rem'}}>Módulo 4 · Product Management</div>
+          <h2 style={{marginBottom:'.3rem'}}>Priorización y alineación con stakeholders</h2>
+          <p className="subtitle">Asigna cada iniciativa al sprint donde debe ejecutarse, o déjala fuera del quarter. Luego justifica tu decisión.</p>
+        </div>
+
+        {/* Context */}
+        <div style={{background:'rgba(124,58,237,.07)', border:'1px solid var(--border)', borderRadius:12, padding:'1rem 1.2rem', marginBottom:'1.1rem', fontSize:'.87rem', lineHeight:1.7, color:'var(--muted)'}}>
+          <strong style={{color:'var(--text)'}}>Contexto:</strong> Eres el Business Specialist de la vertical <span style={{color:'var(--accent)', fontWeight:700}}>Promos</span> en Yape. Estás en el <strong style={{color:'var(--text)'}}>último mes de Q3</strong> cerrando la priorización de Q4. El objetivo es <span style={{color:'var(--green)', fontWeight:700}}>S/ 500K de GMV</span>. El promedio mensual actual es <strong style={{color:'var(--text)'}}>S/ 95K</strong> — proyecta S/ 285K sin cambios. Q4 tiene <strong style={{color:'var(--text)'}}>6 sprints × 10 puntos = 60 puntos disponibles</strong>. Los puntos de historia son la estimación de esfuerzo del equipo de tecnología.
+          <div style={{marginTop:'.75rem', padding:'.6rem .85rem', background:'rgba(248,113,113,.07)', border:'1px solid rgba(248,113,113,.2)', borderRadius:8, color:'#FCA5A5', fontSize:'.82rem'}}>
+            ⚠️ En la sesión de planning, el Head Comercial dice: <em>"La integración con cashback es la prioridad número uno — va a disparar el GMV. Y la sección de Promos del día tiene que estar desde el inicio del quarter, marketing ya tiene una campaña preparada."</em>
+          </div>
+        </div>
+
+        {/* Capacity bar */}
+        <div style={{display:'flex', alignItems:'center', gap:'1rem', marginBottom:'1.1rem', padding:'.7rem 1rem', background:'rgba(28,16,64,.6)', border:'1px solid var(--border)', borderRadius:10}}>
+          <div style={{flex:1}}>
+            <div style={{display:'flex', justifyContent:'space-between', marginBottom:'.3rem'}}>
+              <span style={{fontSize:'.78rem', color:'var(--muted)'}}>Puntos asignados al quarter</span>
+              <span style={{fontFamily:'var(--mono)', fontWeight:700, fontSize:'.85rem', color: assignedSP > totalSP ? 'var(--red)' : assignedSP > 48 ? 'var(--amber)' : 'var(--green)'}}>
+                {assignedSP} / {totalSP} SP
+              </span>
+            </div>
+            <div style={{height:6, background:'rgba(167,139,250,.1)', borderRadius:100, overflow:'hidden'}}>
+              <div style={{height:'100%', width: Math.min(100, assignedSP/totalSP*100)+'%',
+                background: assignedSP > totalSP ? 'var(--red)' : assignedSP > 48 ? 'var(--amber)' : 'var(--green)',
+                borderRadius:100, transition:'width .3s, background .3s'}}/>
+            </div>
+          </div>
+          {assignedSP > totalSP && (
+            <span style={{fontSize:'.78rem', color:'var(--red)', fontWeight:700, whiteSpace:'nowrap'}}>⚠️ +{assignedSP - totalSP} SP sobre capacidad</span>
+          )}
+        </div>
+
+        {/* Drag-and-drop board */}
+        <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'.75rem', marginBottom:'1rem'}}>
+
+          {/* Unassigned pool */}
+          <div
+            style={{gridColumn:'1/-1', background:'rgba(28,16,64,.5)', border: dragging ? '2px dashed var(--accent)' : '1px solid var(--border)', borderRadius:12, padding:'.75rem', minHeight:80}}
+            onDrop={(e) => handleDrop(e, 'out')}
+            onDragOver={handleDragOver}
+          >
+            <div style={{fontSize:'.72rem', fontWeight:700, color:'var(--dim)', textTransform:'uppercase', letterSpacing:'.07em', marginBottom:'.6rem'}}>
+              📦 Backlog — fuera del quarter ({PM_BACKLOG.filter(i => assignment[i.id] === 'out').length} iniciativas, {PM_BACKLOG.filter(i => assignment[i.id] === 'out').reduce((s,i) => s+i.pts, 0)} SP)
+            </div>
+            <div style={{display:'flex', flexWrap:'wrap', gap:'.5rem', minHeight:40}}>
+              {PM_BACKLOG.filter(i => assignment[i.id] === 'out').map(item => {
+                const c = tc(item.type);
+                return (
+                  <div
+                    key={item.id}
+                    draggable
+                    onDragStart={(e) => handleDragStart(e, item.id)}
+                    style={{
+                      background: c.bg, border: '1px solid ' + c.border, borderRadius:8,
+                      padding:'.5rem .75rem', cursor:'grab', userSelect:'none',
+                      opacity: dragging === item.id ? .5 : 1, transition:'opacity .15s',
+                      display:'flex', flexDirection:'column', gap:'.25rem', minWidth:200, maxWidth:260
+                    }}
+                  >
+                    <div style={{display:'flex', alignItems:'center', gap:'.5rem'}}>
+                      <span style={{fontFamily:'var(--mono)', fontWeight:800, color:c.text, fontSize:'.82rem'}}>{item.id}</span>
+                      <span style={{color:'var(--text)', fontSize:'.8rem', fontWeight:600, flex:1}}>{item.title}</span>
+                      <span style={{fontFamily:'var(--mono)', fontSize:'.75rem', color: item.pts > 10 ? 'var(--red)' : 'var(--amber)', fontWeight:700, whiteSpace:'nowrap'}}>{item.pts}SP</span>
+                    </div>
+                    <div style={{display:'flex', flexDirection:'column', gap:'.1rem', paddingLeft:'.1rem'}}>
+                      <span style={{fontSize:'.7rem', color:'var(--dim)'}}>📌 {item.reason}</span>
+                      <span style={{fontSize:'.7rem', color:c.text, opacity:.85}}>↗ {item.impact}</span>
+                    </div>
+                  </div>
+                );
+              })}
+              {PM_BACKLOG.filter(i => assignment[i.id] === 'out').length === 0 && (
+                <div style={{color:'var(--dim)', fontSize:'.8rem', fontStyle:'italic'}}>Todas las iniciativas están asignadas</div>
+              )}
+            </div>
+          </div>
+
+          {/* Sprint lanes */}
+          {SPRINTS.map(sp => {
+            const spSP   = sprintSP(sp);
+            const over   = spSP > CAPACITY;
+            const items  = PM_BACKLOG.filter(i => assignment[i.id] === sp);
+            return (
+              <div
+                key={sp}
+                onDrop={(e) => handleDrop(e, sp)}
+                onDragOver={handleDragOver}
+                style={{
+                  background: over ? 'rgba(248,113,113,.06)' : 'rgba(28,16,64,.4)',
+                  border: dragging ? '2px dashed ' + (over ? 'var(--red)' : 'var(--accent)') : '1px solid ' + (over ? 'rgba(248,113,113,.4)' : 'var(--border)'),
+                  borderRadius:12, padding:'.75rem', minHeight:90,
+                  transition:'border .15s, background .15s'
+                }}
+              >
+                <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'.5rem'}}>
+                  <span style={{fontSize:'.78rem', fontWeight:700, color:'var(--neon)'}}>Sprint {sp}</span>
+                  <span style={{fontFamily:'var(--mono)', fontSize:'.75rem', fontWeight:700,
+                    color: over ? 'var(--red)' : spSP > 0 ? 'var(--amber)' : 'var(--dim)'}}>
+                    {spSP}/{CAPACITY} SP {over ? '⚠️' : ''}
+                  </span>
+                </div>
+                <div style={{display:'flex', flexDirection:'column', gap:'.4rem', minHeight:40}}>
+                  {items.map(item => {
+                    const c = tc(item.type);
+                    return (
+                      <div
+                        key={item.id}
+                        draggable
+                        onDragStart={(e) => handleDragStart(e, item.id)}
+                        style={{
+                          background:c.bg, border:'1px solid '+c.border, borderRadius:7,
+                          padding:'.45rem .6rem', cursor:'grab', userSelect:'none',
+                          opacity: dragging === item.id ? .5 : 1,
+                          display:'flex', flexDirection:'column', gap:'.2rem'
+                        }}
+                      >
+                        <div style={{display:'flex', alignItems:'center', gap:'.4rem'}}>
+                          <span style={{fontFamily:'var(--mono)', fontWeight:800, color:c.text, fontSize:'.78rem'}}>{item.id}</span>
+                          <span style={{color:'var(--text)', fontSize:'.76rem', flex:1, fontWeight:600}}>{item.title}</span>
+                          <span style={{fontFamily:'var(--mono)', fontSize:'.7rem', color: item.pts > 10 ? 'var(--red)' : 'var(--amber)', fontWeight:700}}>{item.pts}SP</span>
+                        </div>
+                        <div style={{display:'flex', flexDirection:'column', gap:'.08rem', paddingLeft:'.1rem'}}>
+                          <span style={{fontSize:'.67rem', color:'var(--dim)'}}>📌 {item.reason}</span>
+                          <span style={{fontSize:'.67rem', color:c.text, opacity:.8}}>↗ {item.impact}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {items.length === 0 && (
+                    <div style={{color:'var(--dim)', fontSize:'.74rem', fontStyle:'italic', textAlign:'center', paddingTop:'.5rem'}}>Arrastra aquí</div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Justification */}
+        <div style={{marginBottom:'1rem'}}>
+          <div style={{background:'rgba(103,232,249,.05)', border:'1px solid rgba(103,232,249,.2)', borderRadius:10, padding:'.85rem 1rem', marginBottom:'.75rem', fontSize:'.88rem', lineHeight:1.65, color:'var(--text)'}}>
+            <span style={{color:'var(--cyan)', fontWeight:700}}>🧠 Justifica tu decisión:</span> ¿Por qué ese orden? ¿Qué iniciativas dejaste fuera y por qué? ¿Qué harías con D (cashback) dado lo que dijo el Head Comercial?
+          </div>
+          <div className="label" style={{marginBottom:'.5rem'}}>✍️ Tu justificación</div>
+          <textarea
+            className="prose-area"
+            value={justify}
+            onChange={e => setJustify(e.target.value)}
+            placeholder="Explica el criterio detrás de tu priorización..."
+            style={{minHeight:150}}
+          />
+          <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:'.4rem', marginBottom:'1rem'}}>
+            <div style={{flex:1, marginRight:'1rem'}}>
+              <div style={{height:3, background:'rgba(167,139,250,.1)', borderRadius:100, overflow:'hidden'}}>
+                <div style={{height:'100%', width:progress+'%', background:justify.trim().length>=MIN_JUSTIFY?'var(--green)':'var(--accent)', borderRadius:100, transition:'width .3s,background .3s'}}/>
+              </div>
+            </div>
+            <div className="char-count">{justify.trim().length}/{MIN_JUSTIFY} chars mínimo</div>
+          </div>
+        </div>
+
+        <div style={{display:'flex', gap:'1rem', alignItems:'center', flexWrap:'wrap'}}>
+          <button
+            className={`btn ${isReady ? 'btn-green' : 'btn-ghost'}`}
+            onClick={handleFinish}
+            disabled={!isReady}
+            style={{opacity: isReady ? 1 : .5}}
+          >
+            ✅ Finalizar Challenge
+          </button>
+          {!isReady && !PM_BACKLOG.some(i => assignment[i.id] !== 'out') && (
+            <span style={{color:'var(--dim)', fontSize:'.82rem'}}>Asigna al menos una iniciativa a un sprint</span>
+          )}
+          <span className={`saved-indicator ${saved ? 'show' : ''}`}>✓ Guardado</span>
+        </div>
+
+      </div>
+    </div>
+  );
+}
+
 // ── SCREEN 4: Candidate Completion ────────────────────────────────────────
-function CompletionScreen({ candidate, email, sqlData, bizData, chartData, onAdminAccess }) {
+function CompletionScreen({ candidate, email, sqlData, bizData, chartData, pmData, onAdminAccess }) {
   const [downloaded, setDownloaded] = useState(false);
   const now = new Date().toLocaleDateString('es-PE', {day:'2-digit', month:'long', year:'numeric', hour:'2-digit', minute:'2-digit'});
 
@@ -937,6 +1200,11 @@ function CompletionScreen({ candidate, email, sqlData, bizData, chartData, onAdm
       div,
       (chartData?.answer || 'Sin respuesta'),
       '',
+      div,
+      'MÓDULO 4 · PM – PRIORIZACIÓN Q4',
+      div,
+      (pmData?.summary || 'Sin respuesta'),
+      '',
       sep,
     ];
     const text = lines.join('\n');
@@ -978,6 +1246,7 @@ function CompletionScreen({ candidate, email, sqlData, bizData, chartData, onAdm
               {icon:'💾', label:'Módulo 1', desc:'Tu consulta SQL sobre events_commerce'},
               {icon:'📊', label:'Módulo 2', desc:'Tu análisis del caso de pricing con cuotas'},
               {icon:'📈', label:'Módulo 3', desc:'Tu interpretación del gráfico de ventas Promos'},
+              {icon:'🎯', label:'Módulo 4', desc:'Tu asignación de iniciativas al backlog Q4 con justificación'},
             ].map(({icon,label,desc}) => (
               <div key={label} style={{display:'flex',alignItems:'center',gap:'.75rem',padding:'.5rem .75rem',background:'rgba(28,16,64,.5)',borderRadius:8}}>
                 <span style={{fontSize:'1.2rem'}}>{icon}</span>
@@ -1017,7 +1286,7 @@ function CompletionScreen({ candidate, email, sqlData, bizData, chartData, onAdm
 // ── SCREEN 4b: Admin Report (PIN-gated) ────────────────────────────────────
 const ADMIN_PIN = '2025'; // ← cambia este PIN antes de publicar
 
-function ReportScreen({ candidate, email, sqlData, bizData, chartData }) {
+function ReportScreen({ candidate, email, sqlData, bizData, chartData, pmData }) {
   const [pin, setPin] = useState('');
   const [unlocked, setUnlocked] = useState(false);
   const [pinError, setPinError] = useState(false);
@@ -1063,7 +1332,20 @@ function ReportScreen({ candidate, email, sqlData, bizData, chartData }) {
     return Math.min(pts, 100);
   })();
 
-  const totalScore = Math.round((sqlScore + bizScore + chartScore) / 3);
+  const pmScore = (() => {
+    const a1 = (pmData?.summary||'').toLowerCase();
+    const a2 = (pmData?.justify||'').toLowerCase();
+    const a  = a1 + ' ' + a2;
+    let pts = 0;
+    if (a1.includes('e') || a1.includes('bug') || a1.includes('falla') || a1.includes('transacc')) pts += 20;
+    if (a1.includes('sprint') || a1.includes('punto') || a1.includes('capacidad')) pts += 20;
+    if (a.includes('bug') || a.includes('deuda') || a.includes('sprint')) pts += 20;
+    if (a.includes('cashback') || a.includes('head') || a.includes('comercial')) pts += 20;
+    if (a.trim().split(/\s+/).length > 120) pts += 20;
+    return Math.min(pts, 100);
+  })();
+
+  const totalScore = Math.round((sqlScore + bizScore + chartScore + pmScore) / 4);
   const level      = totalScore >= 80 ? 'Alto' : totalScore >= 55 ? 'Medio' : 'Básico';
   const levelColor = totalScore >= 80 ? 'var(--green)' : totalScore >= 55 ? 'var(--amber)' : 'var(--red)';
   const recommendation = totalScore >= 80
@@ -1101,6 +1383,9 @@ function ReportScreen({ candidate, email, sqlData, bizData, chartData }) {
     '',
     '── MÓDULO GRÁFICO VENTAS PROMOS ────────────',
     (chartData?.answer || 'Sin respuesta').substring(0, 800) + ((chartData?.answer||'').length > 800 ? '\n[...respuesta truncada]' : ''),
+    '',
+    '── MÓDULO 4 · PM – PRIORIZACIÓN Q4 ────────',
+    (pmData?.summary || 'Sin respuesta').substring(0, 800) + ((pmData?.summary||'').length > 800 ? '\n[...truncado]' : ''),
     '',
     '── FIRMA ────────────────────────────────────',
     'Generado por Yape · GPM Commerce · Challenge Platform',
@@ -1169,7 +1454,7 @@ function ReportScreen({ candidate, email, sqlData, bizData, chartData }) {
 
   return (
     <div className="screen" style={{justifyContent:'flex-start',paddingTop:'2rem'}}>
-      <ProgressHeader step={5} total={5} steps={['Registro','SQL','Cuotas','Ventas','Reporte']}/>
+      <ProgressHeader step={6} total={6} steps={['Registro','SQL','Cuotas','Ventas','PM','Reporte']}/>
       <div className="card card-wide animate-in">
 
         <div style={{textAlign:'center',marginBottom:'2rem'}}>
@@ -1179,11 +1464,12 @@ function ReportScreen({ candidate, email, sqlData, bizData, chartData }) {
           <p className="subtitle">{candidate} · {now}</p>
         </div>
 
-        <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'1rem',marginBottom:'1.5rem'}}>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:'1rem',marginBottom:'1.5rem'}}>
           {[
             {label:'SQL',     score:sqlScore,   icon:'💾'},
             {label:'Pricing', score:bizScore,   icon:'📊'},
             {label:'Ventas',  score:chartScore, icon:'📈'},
+            {label:'PM',      score:pmScore,    icon:'🎯'},
             {label:'Total',   score:totalScore, icon:'⭐', highlight:true},
           ].map(({label,score,icon,highlight}) => (
             <div key={label} style={{
@@ -1246,6 +1532,7 @@ function App() {
   const [sqlData, setSqlData] = useState(null);
   const [bizData, setBizData] = useState(null);
   const [chartData, setChartData] = useState(null);
+  const [pmData, setPmData] = useState(null);
 
   const handleStart = (name, mail) => {
     setCandidate(name);
@@ -1306,14 +1593,25 @@ function App() {
           }}
         />
       )}
-      {step === 5 && <CompletionScreen candidate={candidate} email={email} sqlData={sqlData} bizData={bizData} chartData={chartData} onAdminAccess={()=>setStep(6)}/>}
-      {step === 6 && (
+      {step === 5 && (
+        <PMScreen
+          candidate={candidate}
+          savedData={pmData}
+          onComplete={(data) => {
+            setPmData(data);
+            setStep(6);
+          }}
+        />
+      )}
+      {step === 6 && <CompletionScreen candidate={candidate} email={email} sqlData={sqlData} bizData={bizData} chartData={chartData} pmData={pmData} onAdminAccess={()=>setStep(7)}/>}
+      {step === 7 && (
         <ReportScreen
           candidate={candidate}
           email={email}
           sqlData={sqlData}
           bizData={bizData}
           chartData={chartData}
+          pmData={pmData}
         />
       )}
     </div>
